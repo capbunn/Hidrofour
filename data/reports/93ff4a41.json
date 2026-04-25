@@ -1,0 +1,56 @@
+{
+  "report_id": "93ff4a41",
+  "generat_la": "2026-04-25T13:24:56.787763",
+  "pin_count": 1,
+  "judete": {
+    "Hunedoara": {
+      "nr_total_pinuri": 1,
+      "scor_maxim": 3.3,
+      "probleme": [
+        {
+          "categorie": "poluare_apa",
+          "nr_pinuri": 1,
+          "mesaje": [
+            "sunt gunoaie"
+          ],
+          "autori": [
+            "matei"
+          ],
+          "validare_geografica": {
+            "valid": true,
+            "entitati_detectate": [],
+            "referinte_invalide": [],
+            "motivatie": "Referințele geografice sunt corecte."
+          },
+          "date_copernicus": {
+            "precipitatii_mm": 25,
+            "umiditate_sol_pct": 55,
+            "ndvi": 0.5,
+            "temperatura_c": 20
+          },
+          "scor_risc": 3.3,
+          "nivel_risc": "SCĂZUT",
+          "evaluare_ai": "Probleme de tip 'poluare_apa' raportate în județul Hunedoara cu scor de risc 3.3/10. Evaluarea completă necesită API key Claude configurat.",
+          "recomandari": [
+            "Verificare teren de către inspectorat de mediu local",
+            "Corelare cu datele INHGA / ANPM pentru zona afectată",
+            "Informare prefectură județeană pentru luare de măsuri"
+          ],
+          "factori_stiintifici": [
+            "volum raportări cetățeni",
+            "zona de risc predefinită",
+            "date satelit"
+          ]
+        }
+      ]
+    }
+  },
+  "sumar_executiv": {
+    "total_judete_afectate": 1,
+    "judete_critic": [],
+    "judete_ridicat": [],
+    "judete_moderat": [],
+    "prioritate_interventie": [],
+    "nota": "Județele cu scor CRITIC necesită intervenție imediată. Raportul este generat automat și necesită validare de un operator uman înainte de transmiterea la minister."
+  }
+}

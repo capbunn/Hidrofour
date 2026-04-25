@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monitorizare Mediu România</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+    body { display: flex; flex-direction: column; height: 100vh; background: #f5f5f5; }
+
+    #header {
+      background: #1a3a5c;
+      color: white;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    #header h1 { font-size: 16px; font-weight: 600; margin-right: auto; }
+    #stats { display: flex; gap: 16px; font-size: 13px; opacity: 0.85; }
+    .stat span { font-weight: 700; color: #7ecfff; }
+
+    .btn {
+      padding: 7px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .btn-outline { background: transparent; border: 1.5px solid rgba(255,255,255,0.5); color: white; }
+    .btn-outline:hover { background: rgba(255,255,255,0.1); }
+    .btn-primary { background: #2a7ae4; color: white; }
+    .btn-primary:hover { background: #1a6ad4; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-success:hover { background: #218838; }
+    .btn-danger { background: #dc3545; color: white; }
+
+    #map { flex: 1; z-index: 0; }
+
+    /* Panel */
+    #panel {
+      position: absolute;
+      top: 80px;
+      right: 16px;
+      width: 300px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+      padding: 20px;
+      z-index: 1000;
+      display: none;
+    }
+    #panel h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: #1a3a5c; }
+    #panel .judet-badge {
+      display: inline-block;
+      background: #e8f0fe;
+      color: #1a3a5c;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-bottom: 14px;
+    }
+    #panel label { font-size: 12px; font-weight: 600; color: #555; display: block; margin-bottom: 4px; }
+    #panel input, #panel textarea, #panel select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    #panel input:focus, #panel textarea:focus, #panel select:focus {
+      outline: none;
+      border-color: #2a7ae4;
+    }
+    #panel textarea { resize: vertical; }
+    #panel .coords { font-size: 11px; color: #999; margin-bottom: 12px; }
+    #panel .row { display: flex; gap: 8px; }
+    #panel .row .btn { flex: 1; }
+
+    /* Toast */
+    #toast {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a3a5c;
+      color: white;
+      padding: 10px 24px;
+      border-radius: 24px;
+      font-size: 13px;
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Legend */
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      right: 16px;
+      background: white;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 12px;
+      z-index: 1000;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      color: #555;
+    }
+    #legend div { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    #legend div:last-child { margin-bottom: 0; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Loading overlay */
+    #loading {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+      display: none;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #ddd;
+      border-top-color: #2a7ae4;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Monitorizare Mediu — România</h1>
+  <div id="stats">
+    <div class="stat">Pin-uri: <span id="pin-count">0</span></div>
+    <div class="stat">Județe: <span id="jud-count">0</span></div>
+  </div>
+  <button class="btn btn-outline" onclick="exportJSON()">Export JSON</button>
+  <button class="btn btn-outline" onclick="exportCSV()">Export CSV</button>
+  <button class="btn btn-success" onclick="sendAllToBackend()">Trimite la server</button>
+</div>
+
+<div style="position:relative; flex:1; display:flex; flex-direction:column;">
+  <div id="map"></div>
+
+  <div id="panel">
+    <h2 id="panel-title">Pin nou</h2>
+    <div class="judet-badge" id="panel-judet">—</div>
+    <div class="coords" id="panel-coords"></div>
+
+    <label>Numele tău / poreclă *</label>
+    <input id="pin-name" type="text" placeholder="ex: Maria" maxlength="60"/>
+
+    <label>Categorie</label>
+    <select id="pin-category">
+      <option value="inundatie">Inundație / viitură</option>
+      <option value="poluare_apa">Poluare apă</option>
+      <option value="poluare_aer">Poluare aer</option>
+      <option value="alunecare">Alunecare de teren</option>
+      <option value="deseuri">Deșeuri ilegale</option>
+      <option value="seceta">Secetă</option>
+      <option value="incendiu">Incendiu vegetație</option>
+      <option value="altele">Altele</option>
+    </select>
+
+    <label>Mesajul tău *</label>
+    <textarea id="pin-text" rows="3" placeholder="Descrie ce observi…" maxlength="300"></textarea>
+
+    <div class="row">
+      <button class="btn btn-danger" onclick="closePanel()">Anulează</button>
+      <button class="btn btn-primary" onclick="savePin()">Salvează pin</button>
+    </div>
+  </div>
+
+  <div id="toast">Pin salvat!</div>
+  <div id="loading"><div class="spinner"></div></div>
+
+  <div id="legend">
+    <div><div class="dot" style="background:#2a7ae4"></div> Pin nou</div>
+    <div><div class="dot" style="background:#28a745"></div> Trimis la server</div>
+    <div><div class="dot" style="background:#dc3545"></div> Risc ridicat</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const BACKEND_URL = "http://localhost:8000"; // Schimbă cu URL-ul serverului tău
+
+// ── JUDEȚE (centroizi pentru detecție) ──────────────────────────────────────
+const JUD_CENTERS = {
+  "Alba":[46.07,23.57],"Arad":[46.17,21.32],"Argeș":[44.85,24.87],
+  "Bacău":[46.58,26.91],"Bihor":[47.05,22.0],"Bistrița-Năsăud":[47.13,24.5],
+  "Botoșani":[47.74,26.66],"Brăila":[45.26,27.96],"Brașov":[45.65,25.61],
+  "București":[44.43,26.1],"Buzău":[45.15,26.83],"Călărași":[44.2,27.33],
+  "Caraș-Severin":[45.3,22.07],"Cluj":[46.77,23.6],"Constanța":[44.18,28.63],
+  "Covasna":[45.86,26.18],"Dâmbovița":[44.93,25.45],"Dolj":[44.3,23.79],
+  "Galați":[45.44,28.05],"Giurgiu":[43.9,25.97],"Gorj":[45.05,23.27],
+  "Harghita":[46.36,25.8],"Hunedoara":[45.71,22.9],"Ialomița":[44.56,27.36],
+  "Iași":[47.16,27.59],"Ilfov":[44.56,26.03],"Maramureș":[47.66,23.57],
+  "Mehedinți":[44.63,22.67],"Mureș":[46.54,24.56],"Neamț":[46.97,26.38],
+  "Olt":[44.43,24.36],"Prahova":[45.13,26.02],"Satu Mare":[47.79,22.88],
+  "Sălaj":[47.19,23.06],"Sibiu":[45.8,24.15],"Suceava":[47.65,26.25],
+  "Teleorman":[44.01,25.24],"Timiș":[45.74,21.22],"Tulcea":[45.17,28.8],
+  "Vâlcea":[45.1,24.37],"Vaslui":[46.64,27.73],"Vrancea":[45.7,27.18]
+};
+
+function getJudet(lat, lng) {
+  let best = null, bestDist = Infinity;
+  for (const [j, c] of Object.entries(JUD_CENTERS)) {
+    const d = Math.sqrt((lat-c[0])**2 + (lng-c[1])**2);
+    if (d < bestDist) { bestDist = d; best = j; }
+  }
+  return best;
+}
+
+// ── HARTĂ ───────────────────────────────────────────────────────────────────
+const map = L.map('map', { center: [45.9, 24.9], zoom: 7 });
+
+// Hartă satelit cu fallback la OSM
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+const pins = [];
+let pendingLatLng = null;
+
+function makeIcon(color) {
+  return L.divIcon({
+    html: `<div style="width:14px;height:14px;background:${color};border:2.5px solid white;
+           border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>`,
+    className: '', iconAnchor: [7, 7]
+  });
+}
+
+// ── CLICK PE HARTĂ ───────────────────────────────────────────────────────────
+map.on('click', (e) => {
+  const { lat, lng } = e.latlng;
+  if (lat < 43.4 || lat > 48.5 || lng < 20.2 || lng > 30.0) {
+    showToast('Click în interiorul României!');
+    return;
+  }
+  pendingLatLng = { lat, lng };
+  const judet = getJudet(lat, lng);
+  document.getElementById('panel-title').textContent = 'Pin nou';
+  document.getElementById('panel-judet').textContent = '📍 ' + judet;
+  document.getElementById('panel-coords').textContent =
+    `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
+  document.getElementById('pin-name').value = '';
+  document.getElementById('pin-text').value = '';
+  document.getElementById('panel').style.display = 'block';
+  setTimeout(() => document.getElementById('pin-name').focus(), 100);
+});
+
+// ── SALVARE PIN ──────────────────────────────────────────────────────────────
+function savePin() {
+  const name = document.getElementById('pin-name').value.trim();
+  const text = document.getElementById('pin-text').value.trim();
+  if (!name) { document.getElementById('pin-name').focus(); return; }
+  if (!text) { document.getElementById('pin-text').focus(); return; }
+
+  const { lat, lng } = pendingLatLng;
+  const judet = getJudet(lat, lng);
+  const category = document.getElementById('pin-category').value;
+
+  const pin = {
+    id: Date.now(),
+    name, text, category,
+    lat: +lat.toFixed(6),
+    lng: +lng.toFixed(6),
+    judet,
+    trimis: false,
+    creat_la: new Date().toISOString()
+  };
+
+  pins.push(pin);
+
+  const marker = L.marker([lat, lng], { icon: makeIcon('#2a7ae4') }).addTo(map);
+  pin._marker = marker;
+  marker.bindPopup(`
+    <b>${name}</b> — <i>${judet}</i><br>
+    <small style="color:#888">${categoryLabel(category)}</small><br>
+    ${text}
+  `);
+
+  updateStats();
+  closePanel();
+  showToast('Pin salvat!');
+}
+
+function categoryLabel(cat) {
+  const labels = {
+    inundatie:'Inundație / viitură', poluare_apa:'Poluare apă',
+    poluare_aer:'Poluare aer', alunecare:'Alunecare de teren',
+    deseuri:'Deșeuri ilegale', seceta:'Secetă',
+    incendiu:'Incendiu vegetație', altele:'Altele'
+  };
+  return labels[cat] || cat;
+}
+
+function closePanel() {
+  document.getElementById('panel').style.display = 'none';
+  pendingLatLng = null;
+}
+
+// ── STATISTICI ────────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('pin-count').textContent = pins.length;
+  document.getElementById('jud-count').textContent =
+    new Set(pins.map(p => p.judet)).size;
+}
+
+// ── EXPORT JSON ──────────────────────────────────────────────────────────────
+function exportJSON() {
+  if (!pins.length) { showToast('Nu există pin-uri!'); return; }
+  const grouped = groupByJudet();
+  const data = {
+    exportat_la: new Date().toISOString(),
+    total_pinuri: pins.length,
+    total_judete: Object.keys(grouped).length,
+    judete: grouped
+  };
+  downloadFile(JSON.stringify(data, null, 2), 'pinuri_romania.json', 'application/json');
+  showToast('JSON exportat!');
+}
+
+// ── EXPORT CSV ───────────────────────────────────────────────────────────────
+function exportCSV() {
+  if (!pins.length) { showToast('Nu există pin-uri!'); return; }
+  const rows = [['ID','Nume','Categorie','Mesaj','Lat','Lng','Județ','Creat la','Trimis']];
+  pins.forEach(p => rows.push([
+    p.id, p.name, categoryLabel(p.category), p.text,
+    p.lat, p.lng, p.judet, p.creat_la, p.trimis ? 'Da' : 'Nu'
+  ]));
+  const csv = rows.map(r =>
+    r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')
+  ).join('\n');
+  downloadFile('\uFEFF' + csv, 'pinuri_romania.csv', 'text/csv;charset=utf-8');
+  showToast('CSV exportat!');
+}
+
+// ── TRIMITE LA BACKEND ────────────────────────────────────────────────────────
+async function sendAllToBackend() {
+  const unsent = pins.filter(p => !p.trimis);
+  if (!unsent.length) { showToast('Toate pin-urile sunt deja trimise!'); return; }
+
+  showLoading(true);
+  try {
+    const payload = {
+      judete: groupByJudet(unsent),
+      pins: unsent.map(({ _marker, ...p }) => p) // exclude Leaflet marker
+    };
+
+    const resp = await fetch(`${BACKEND_URL}/api/pins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
+    const result = await resp.json();
+
+    // Marchează pin-urile ca trimise
+    unsent.forEach(p => {
+      p.trimis = true;
+      if (p._marker) p._marker.setIcon(makeIcon('#28a745'));
+    });
+
+    showToast(`${unsent.length} pin-uri trimise! ID raport: ${result.report_id || '—'}`);
+  } catch (err) {
+    showToast('Eroare: ' + err.message);
+    console.error(err);
+  } finally {
+    showLoading(false);
+  }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function groupByJudet(list = pins) {
+  return list.reduce((acc, p) => {
+    const { _marker, ...clean } = p;
+    if (!acc[p.judet]) acc[p.judet] = [];
+    acc[p.judet].push(clean);
+    return acc;
+  }, {});
+}
+
+function downloadFile(content, filename, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  a.click();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function showLoading(show) {
+  document.getElementById('loading').style.display = show ? 'flex' : 'none';
+}
+
+// Tastă ESC închide panoul
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+</script>
+</body>
+</html>
