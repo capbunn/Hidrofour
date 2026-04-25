@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report problems in your area</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 70vh; width: 100%; margin-bottom: 1rem; }
+        .leaflet-popup-content { min-width: 120px; }
+    </style>
+</head>
+<body>
+    <h1>Report problems in your area</h1>
+    <div id="map"></div>
+    <form id="pinForm">
+        <input type="hidden" id="lat" required>
+        <input type="hidden" id="lng" required>
+        <label>Theme:
+            <select id="theme" required>
+                <option value="flood">Flood</option>
+                <option value="drought">Drought</option>
+                <option value="garbage">Garbage in Water</option>
+                <option value="other">Other</option>
+            </select>
+        </label>
+        <label>Your Name:
+            <input type="text" id="name" maxlength="32" required>
+        </label>
+        <label>Description:
+            <input type="text" id="description" maxlength="120" required placeholder="Describe the problem...">
+        </label>
+        <button type="submit">Report</button>
+    </form>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Initialize map centered on Romania
+        var map = L.map('map').setView([45.9432, 24.9668], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Fetch and display pins
+        function loadPins() {
+            fetch('/api/pins')
+                .then(res => res.json())
+                .then(pins => {
+                    pins.forEach(pin => {
+                        L.marker([pin.lat, pin.lng])
+                            .addTo(map)
+                            .bindPopup(`<b>Theme:</b> ${pin.theme}<br><b>Name:</b> ${pin.name}<br><b>Description:</b> ${pin.description}`);
+                    });
+                });
+        }
+        loadPins();
+
+        // Add pin by clicking map (user must click to select location)
+        let selectedLatLng = null;
+        let tempMarker = null;
+        map.on('click', function(e) {
+            selectedLatLng = e.latlng;
+            document.getElementById('lat').value = e.latlng.lat;
+            document.getElementById('lng').value = e.latlng.lng;
+            if (tempMarker) map.removeLayer(tempMarker);
+            tempMarker = L.marker(e.latlng, {opacity: 0.5}).addTo(map);
+        });
+
+        // Handle form submit
+        document.getElementById('pinForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const lat = parseFloat(document.getElementById('lat').value);
+            const lng = parseFloat(document.getElementById('lng').value);
+            const theme = document.getElementById('theme').value;
+            const name = document.getElementById('name').value.trim();
+            const description = document.getElementById('description').value.trim();
+            if (!selectedLatLng) {
+                alert('Please click on the map to select a location.');
+                return;
+            }
+            fetch('/api/pins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat, lng, theme, name, description })
+            })
+            .then(res => res.json())
+            .then(pin => {
+                L.marker([pin.lat, pin.lng])
+                    .addTo(map)
+                    .bindPopup(`<b>Theme:</b> ${pin.theme}<br><b>Name:</b> ${pin.name}<br><b>Description:</b> ${pin.description}`)
+                    .openPopup();
+                if (tempMarker) map.removeLayer(tempMarker);
+                tempMarker = null;
+                selectedLatLng = null;
+                document.getElementById('pinForm').reset();
+            });
+        });
+    </script>
+</body>
+</html>
